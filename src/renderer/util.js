@@ -1,12 +1,12 @@
 export const KINDS = {
-  conflict: { label: 'Conflict', one: 'Conflict', color: '#ff4d5e' },
-  news: { label: 'News', one: 'News', color: '#a7b6ff' },
-  quake: { label: 'Quakes', one: 'Quake', color: '#ffb547' },
-  storm: { label: 'Storms', one: 'Storm', color: '#4fd8ff' },
-  fire: { label: 'Fires', one: 'Fire', color: '#ff7a2f' },
-  volcano: { label: 'Volcanoes', one: 'Volcano', color: '#e46bff' },
-  flood: { label: 'Floods', one: 'Flood', color: '#3d8bff' },
-  weather: { label: 'Weather', one: 'Weather', color: '#9be37a' },
+  conflict: { label: 'Conflict', one: 'Conflict', code: 'CF', color: '#ff453a' },
+  news: { label: 'News', one: 'News', code: 'NW', color: '#c7c9d1' },
+  quake: { label: 'Quakes', one: 'Quake', code: 'EQ', color: '#ff9f0a' },
+  storm: { label: 'Storms', one: 'Storm', code: 'TS', color: '#64d2ff' },
+  fire: { label: 'Fires', one: 'Fire', code: 'WF', color: '#ffd60a' },
+  volcano: { label: 'Volcanoes', one: 'Volcano', code: 'VO', color: '#e0a96d' },
+  flood: { label: 'Floods', one: 'Flood', code: 'FL', color: '#0a84ff' },
+  weather: { label: 'Weather', one: 'Weather', code: 'WX', color: '#66d4a8' },
 };
 
 export const $ = (s, el = document) => el.querySelector(s);
@@ -57,40 +57,20 @@ export function sevLabel(s) {
   return ['Low', '#6f7f95'];
 }
 
-// Markets commonly linked to an event type and place. Descriptive only, not a signal.
-export function exposures(e) {
-  const out = [];
-  const add = (symbol, why) => { if (!out.some((o) => o.symbol === symbol)) out.push({ symbol, why }); };
-  const r = e.region;
-  const text = `${e.title} ${e.summary} ${e.place}`.toLowerCase();
+// Shared with the autopilot (src/shared/exposures.js, loaded as a classic script).
+export const exposures = (e) => window.LodestarExposures.exposures(e);
 
-  if (e.kind === 'conflict' || e.kind === 'news') {
-    if (/\b(oil|crude|opec|refiner\w*|tanker\w*|pipeline\w*)\b/.test(text)) { add('CL=F', 'Oil named in story'); add('BZ=F', 'Oil named in story'); }
-    if (/\b(lng|natural gas|gas field|gas supply)\b/.test(text)) add('NG=F', 'Gas named in story');
-    if (/\b(wheat|grain|corn|harvest)\b/.test(text)) add('ZW=F', 'Grain named in story');
-    if (/\bgold\b/.test(text)) add('GC=F', 'Gold named in story');
-    if (r === 'middle_east') { add('BZ=F', 'Gulf and Red Sea supply routes'); add('CL=F', 'Crude risk premium'); add('GC=F', 'Safe-haven demand'); add('ITA', 'Defense spending'); }
-    if (r === 'russia_ukraine') { add('NG=F', 'European gas supply'); add('ZW=F', 'Black Sea grain exports'); add('ITA', 'Defense spending'); add('GC=F', 'Safe-haven demand'); }
-    if (/taiwan|china|chinese|beijing|south china sea|korea|pyongyang|japan|pla/.test(text)) { add('TSM', 'Taiwan chip supply'); add('^VIX', 'Risk sentiment'); add('ITA', 'Defense spending'); }
-    if (r === 'europe' && e.kind === 'conflict') { add('ITA', 'Defense spending'); add('NG=F', 'European energy'); }
-    if (/congo|drc|zambia/.test(text)) add('HG=F', 'Copper and cobalt mining');
-    if (/venezuela/.test(text)) add('CL=F', 'Venezuelan crude');
-    if (e.kind === 'conflict' && !out.length) { add('ITA', 'Defense spending'); add('GC=F', 'Safe-haven demand'); }
-  }
-  if (e.kind === 'storm') {
-    if (r === 'gulf_of_mexico') { add('CL=F', 'Gulf offshore output'); add('NG=F', 'Gulf gas production'); add('RB=F', 'Gulf Coast refineries'); add('TRV', 'Insured losses'); }
-    else if (r === 'americas') { add('TRV', 'Insured losses'); add('RB=F', 'Fuel distribution'); }
-    else if (r === 'east_asia') { add('TSM', 'Fab and port disruption'); }
-  }
-  if (e.kind === 'quake' && (e.meta?.mag || 0) >= 5.5) {
-    if (/japan|taiwan/.test(text)) add('TSM', 'Chip fabs');
-    if (/chile|peru/.test(text)) add('HG=F', 'Copper mines');
-    if (/california|alaska|oregon|washington/.test(text)) add('TRV', 'Insured losses');
-    if (/turkey|iran|iraq/.test(text)) add('BZ=F', 'Regional pipelines');
-  }
-  if (e.kind === 'fire' && r === 'americas') add('TRV', 'Insured losses');
-  if ((e.kind === 'flood' || e.kind === 'weather') && /brazil|argentina|iowa|illinois|nebraska|india|ukraine|russia|australia|drought|kenya|ethiopia/.test(text)) {
-    add('ZC=F', 'Crop conditions'); add('ZS=F', 'Crop conditions'); add('ZW=F', 'Crop conditions');
-  }
-  return out.slice(0, 5);
+// Hot-iron thermal palette (black -> deep red -> orange -> yellow -> white).
+const HEAT = [[0, [4, 2, 10]], [0.18, [40, 6, 24]], [0.35, [110, 14, 22]], [0.52, [196, 40, 12]], [0.68, [245, 104, 18]], [0.82, [255, 176, 40]], [0.93, [255, 226, 120]], [1, [255, 252, 232]]];
+export const HEAT_LUT = Array.from({ length: 256 }, (_, i) => {
+  const t = i / 255;
+  let k = 0;
+  while (k < HEAT.length - 2 && t > HEAT[k + 1][0]) k++;
+  const [t0, c0] = HEAT[k], [t1, c1] = HEAT[k + 1];
+  const f = (t - t0) / (t1 - t0 || 1);
+  return c0.map((v, j) => Math.round(v + (c1[j] - v) * f));
+});
+export function heat(t, a = 1) {
+  const [r, g, b] = HEAT_LUT[Math.max(0, Math.min(255, Math.round(t * 255)))];
+  return `rgba(${r},${g},${b},${a})`;
 }

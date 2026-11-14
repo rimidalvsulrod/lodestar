@@ -2,121 +2,124 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: blob:; connect-src 'self' file: data: blob:; worker-src 'self' blob:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' file: data: blob:; connect-src 'self' file: data: blob:; worker-src 'self' blob:">
   <title>Lodestar</title>
+  <link rel="stylesheet" href="../../node_modules/@fontsource/inter/400.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/inter/500.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/inter/600.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/jetbrains-mono/400.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/jetbrains-mono/500.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app">
-    <!-- ============================== top bar -->
-    <header class="topbar">
-      <div class="brand">
-        <img src="logo.svg" alt="">
-        <div class="wordmark"><b>LODESTAR</b><span>Global Event Terminal</span></div>
-      </div>
-      <div class="stats" id="stats"></div>
-      <div class="top-right">
-        <div class="feeds-health" id="feedsHealth" title="Feed status"></div>
-        <span class="badge paper" title="All trading in Lodestar is simulated. No real orders are ever sent.">PAPER</span>
-        <div class="equity-mini" id="equityMini"></div>
-        <div class="clock"><span id="clockUtc"></span><small id="clockLocal"></small></div>
-        <button class="update-pill hidden" id="updatePill"></button>
-        <button class="icon-btn" id="btnSettings" title="Settings">
-          <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
-        </button>
-      </div>
-    </header>
+  <!-- the world -->
+  <div id="stage">
+    <div id="globe" aria-label="Globe of live events"></div>
+    <canvas id="map2d" class="hidden" aria-label="Map of live events"></canvas>
+    <div class="fx" id="fx"></div>
+  </div>
+  <div class="frame" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+  <div class="dragbar"></div>
 
-    <!-- ============================== event feed -->
-    <aside class="panel left">
-      <div class="panel-head">
-        <h2>Live events <span class="live-dot"></span></h2>
-        <button class="ghost small" id="btnRefreshFeeds" title="Refresh all feeds">Refresh</button>
-      </div>
-      <div class="search"><input id="eventSearch" placeholder="Search events, places, sources" spellcheck="false"></div>
-      <div class="chips" id="layerChips"></div>
-      <div class="sortbar">
-        <div class="seg" id="sortSeg"><button data-v="time" class="on">Latest</button><button data-v="severity">Severity</button></div>
-        <span class="muted" id="eventCount"></span>
-      </div>
-      <div class="event-list" id="eventList"></div>
-    </aside>
+  <!-- top left: identity + view readout -->
+  <header class="hud hud-tl">
+    <div class="brand"><img src="logo.svg" alt=""><span class="word">LODE<b>STAR</b></span></div>
+    <div class="hud-line">Global event terminal · paper trading</div>
+  </header>
 
-    <!-- ============================== stage + dock -->
-    <main class="center">
-      <div class="stage" id="stage">
-        <div id="globe"></div>
-        <canvas id="map2d" class="hidden"></canvas>
-        <div class="stage-tools">
-          <div class="seg" id="viewSeg"><button data-v="globe" class="on">Globe</button><button data-v="map">Map</button></div>
-          <div class="seg" id="styleSeg"><button data-v="night" class="on">Night</button><button data-v="satellite">Satellite</button><button data-v="dark">Dark</button></div>
-          <button class="ghost small toggle on" id="btnRotate" title="Auto-rotate">Rotate</button>
-          <button class="ghost small" id="btnHome" title="Reset view">Reset</button>
-        </div>
-        <div class="legend" id="legend"></div>
-        <div class="sat-note hidden" id="satNote"></div>
-        <div class="detail hidden" id="detail"></div>
-        <div class="tooltip hidden" id="tooltip"></div>
-        <div class="stage-loading" id="stageLoading"><div class="spinner"></div>Connecting to feeds…</div>
-      </div>
-
-      <section class="dock">
-        <div class="dock-tabs">
-          <div class="tabs" id="dockTabs">
-            <button data-v="chart" class="on">Chart</button>
-            <button data-v="positions">Positions <span class="count" id="posCount">0</span></button>
-            <button data-v="orders">Orders</button>
-            <button data-v="equity">Equity</button>
-          </div>
-          <div class="chart-head" id="chartHead"></div>
-          <div class="seg" id="rangeSeg">
-            <button data-v="1D" class="on">1D</button><button data-v="5D">5D</button><button data-v="1M">1M</button><button data-v="6M">6M</button><button data-v="1Y">1Y</button><button data-v="5Y">5Y</button>
-          </div>
-        </div>
-        <div class="dock-body">
-          <div class="dock-pane" data-pane="chart"><div id="chart"></div></div>
-          <div class="dock-pane hidden" data-pane="positions"><div class="table-wrap" id="positionsTable"></div></div>
-          <div class="dock-pane hidden" data-pane="orders"><div class="table-wrap" id="ordersTable"></div></div>
-          <div class="dock-pane hidden" data-pane="equity"><div id="equityChart"></div></div>
-        </div>
-      </section>
-    </main>
-
-    <!-- ============================== markets + trading -->
-    <aside class="panel right">
-      <div class="panel-head"><h2>Markets</h2><span class="muted small-text">Delayed quotes</span></div>
-      <div class="watchlist" id="watchlist"></div>
-
-      <div class="ticket" id="ticket">
-        <div class="ticket-head">
-          <h3>Paper order</h3>
-          <div class="seg side" id="sideSeg"><button data-v="buy" class="on buy">Buy</button><button data-v="sell" class="sell">Sell</button></div>
-        </div>
-        <div class="field-row">
-          <label>Symbol<input id="tSymbol" value="CL=F" spellcheck="false"></label>
-          <label>Quantity<input id="tQty" type="number" min="0" step="1" value="10"></label>
-        </div>
-        <div class="field-row">
-          <label>Stop <small>optional</small><input id="tStop" type="number" step="any" placeholder="—"></label>
-          <label>Target <small>optional</small><input id="tTarget" type="number" step="any" placeholder="—"></label>
-        </div>
-        <div class="ticket-est" id="tEst"></div>
-        <button class="primary" id="tSubmit">Place paper buy</button>
-        <p class="fine">Market order at the latest delayed price plus fees. Simulated only — nothing is sent to a broker.</p>
-      </div>
-
-      <div class="account" id="account"></div>
-    </aside>
+  <!-- top right: clock, money, settings -->
+  <div class="hud hud-tr">
+    <span class="rec"><i></i><span id="clock">--:--:-- UTC</span></span>
+    <button class="pill-btn" id="equityBtn" title="Open portfolio (P)"></button>
+    <button class="pill-btn accent hidden" id="updatePill"></button>
+    <button class="icon-btn" id="btnSettings" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+    </button>
   </div>
 
-  <div class="modal-back hidden" id="modalBack"><div class="modal" id="modal"></div></div>
-  <div class="toasts" id="toasts"></div>
+  <!-- left: events -->
+  <aside class="panel p-left" aria-label="Events">
+    <div class="p-head"><h2>Events</h2><span class="mono dim" id="eventCount"></span></div>
+    <div class="layers" id="layers"></div>
+    <div class="p-tools">
+      <input id="eventSearch" type="search" placeholder="Search places, sources" spellcheck="false" aria-label="Search events">
+      <div class="seg sm" id="sortSeg" role="tablist" aria-label="Sort events"><button data-v="time" class="on">Latest</button><button data-v="severity">Severity</button></div>
+    </div>
+    <div class="list" id="eventList"></div>
+  </aside>
+
+  <!-- right: markets + trade -->
+  <aside class="panel p-right" aria-label="Markets">
+    <div class="p-head"><h2>Markets</h2><span class="dim small">Delayed</span></div>
+    <div class="list" id="watchlist"></div>
+    <div class="trade" id="trade">
+      <div class="trade-top">
+        <div><div class="t-sym mono" id="tSym">CL=F</div><div class="t-name dim" id="tName"></div></div>
+        <div class="t-px"><div class="mono" id="tPx">—</div><div class="mono small" id="tCh"></div></div>
+      </div>
+      <div class="qty">
+        <button class="step" data-d="-1" aria-label="Less">−</button>
+        <input id="tQty" type="number" min="0" step="1" value="10" aria-label="Quantity">
+        <button class="step" data-d="1" aria-label="More">+</button>
+        <span class="dim small" id="tNotional"></span>
+      </div>
+      <div class="ls">
+        <button class="btn long" id="btnLong">Long</button>
+        <button class="btn short" id="btnShort">Short</button>
+      </div>
+      <div class="t-pos small" id="tPos"></div>
+      <details class="t-more"><summary>Stop and target</summary>
+        <div class="two"><label>Stop<input id="tStop" type="number" step="any" placeholder="None"></label><label>Target<input id="tTarget" type="number" step="any" placeholder="None"></label></div>
+      </details>
+    </div>
+  </aside>
+
+  <!-- event detail -->
+  <section class="panel card hidden" id="detail" aria-live="polite"></section>
+
+  <!-- bottom left readout -->
+  <div class="hud hud-bl mono" id="readout"></div>
+  <div class="hud hud-br small" id="feedsLine"></div>
+
+  <!-- chart sheet -->
+  <section class="panel sheet hidden" id="chartSheet" aria-label="Chart">
+    <div class="p-head">
+      <div class="chart-title" id="chartHead"></div>
+      <div class="seg sm" id="rangeSeg"><button data-v="1D" class="on">1D</button><button data-v="5D">5D</button><button data-v="1M">1M</button><button data-v="6M">6M</button><button data-v="1Y">1Y</button><button data-v="5Y">5Y</button></div>
+      <button class="icon-btn" data-close="chartSheet" aria-label="Close chart">✕</button>
+    </div>
+    <div class="chart-box"><div id="chart"></div></div>
+  </section>
+
+  <!-- portfolio -->
+  <section class="panel sheet big hidden" id="portfolio" aria-label="Portfolio"></section>
+
+  <!-- dock -->
+  <nav class="dock" aria-label="Controls">
+    <div class="seg" id="viewSeg"><button data-v="globe" class="on">Globe</button><button data-v="map">Map</button></div>
+    <button class="dock-btn" id="btnLook" aria-haspopup="true">Look</button>
+    <button class="dock-btn" id="btnHome">Reset view</button>
+    <span class="sep"></span>
+    <button class="dock-btn" id="btnChart">Chart</button>
+    <button class="dock-btn" id="btnPortfolio">Portfolio</button>
+    <span class="sep"></span>
+    <button class="auto" id="btnAuto" role="switch" aria-checked="false"><i></i><span>Autopilot</span><b>Off</b></button>
+  </nav>
+  <div class="panel tray hidden" id="lookTray">
+    <div class="tray-row"><span class="dim small">Surface</span><div class="seg sm" id="surfaceSeg"><button data-v="night">Night</button><button data-v="satellite">Satellite</button><button data-v="dark">Dark</button></div></div>
+    <div class="tray-row"><span class="dim small">Filter</span><div class="seg sm" id="filterSeg"><button data-v="normal">Normal</button><button data-v="thermal">Thermal</button><button data-v="nvg">NVG</button><button data-v="crt">CRT</button><button data-v="noir">Noir</button></div></div>
+    <div class="tray-row"><span class="dim small">Spin</span><button class="switch" id="spinSwitch" role="switch" aria-label="Auto-rotate"></button></div>
+  </div>
+
+  <div class="modal-back hidden" id="modalBack"><div class="panel modal" id="modal" role="dialog" aria-modal="true"></div></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="../../node_modules/d3/dist/d3.min.js"></script>
   <script src="../../node_modules/topojson-client/dist/topojson-client.min.js"></script>
   <script src="../../node_modules/globe.gl/dist/globe.gl.min.js"></script>
   <script src="../../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <script src="../../assets/world-110m.js"></script>
+  <script src="../shared/exposures.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

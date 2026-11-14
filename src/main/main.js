@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Notification, nativeTheme, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Notification, nativeTheme, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const log = require('electron-log/main');
@@ -6,12 +6,15 @@ const { SOURCES, regionFor, satelliteImage } = require('./feeds');
 const markets = require('./markets');
 const { Ledger } = require('./ledger');
 const updater = require('./updater');
+const { Autopilot } = require('./autopilot');
 
 log.initialize();
 log.transports.file.level = 'info';
 process.on('uncaughtException', (e) => log.error('uncaught', e));
 process.on('unhandledRejection', (e) => log.error('unhandled', e));
 
+// Dev/test runs can use their own data folder so they never touch the installed app's data.
+if (process.env.LODESTAR_DATA) app.setPath('userData', process.env.LODESTAR_DATA);
 app.setAppUserModelId('com.lodestar.terminal');
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -27,6 +30,10 @@ let win;
 let settings = readJson(SETTINGS_FILE, DEFAULT_SETTINGS);
 settings = { ...DEFAULT_SETTINGS, ...settings, layers: { ...DEFAULT_SETTINGS.layers, ...(settings.layers || {}) } };
 let ledger;
+let autopilot;
+let tray;
+let quitting = false;
+const dailyCache = new Map();
 const events = new Map(); // id -> event
 const feedStatus = {};
 let quotes = {};
@@ -61,7 +68,18 @@ function createWindow() {
     const b = win.getNormalBounds();
     writeJson(stateFile, { ...b, maximized: win.isMaximized() });
   };
-  win.on('close', saveState);
+  win.on('close', (e) => {
+    saveState();
+    if (!quitting && autopilot?.s.enabled) {
+      e.preventDefault();
+      win.hide();
+      ensureTray();
+      if (!trayHintShown && Notification.isSupported()) {
+        trayHintShown = true;
+        new Notification({ title: 'Lodestar is still running', body: 'Autopilot keeps paper trading in the background. Right-click the tray icon to quit.' }).show();
+      }
+    }
+  });
 
   win.webContents.on('console-message', (e) => {
     const { level, message, sourceId, lineNumber } = e;
@@ -111,6 +129,7 @@ async function runFeed(key) {
     }
     Object.assign(st, { ok: true, count: list.length, lastOk: Date.now(), error: null });
     maybeNotify(list);
+    autopilot?.onEvents(list.filter((e) => Number.isFinite(e.lat)));
   } catch (err) {
     Object.assign(st, { ok: false, error: err.message, lastErr: Date.now() });
     log.warn(`feed ${key} failed: ${err.message}`);
@@ -147,6 +166,7 @@ function watchSymbols() {
   const set = new Set();
   for (const g of settings.watchlist) for (const [s] of g.symbols) set.add(s);
   for (const a of Object.values(ledger.state.accounts)) for (const s of Object.keys(a.positions)) set.add(s);
+  for (const s of autopilot?.s.universe || []) set.add(s);
   return [...set];
 }
 
@@ -157,6 +177,7 @@ async function refreshQuotes() {
     for (const [s, v] of Object.entries(q)) if (v.ok || !quotes[s]) quotes[s] = v;
     send('markets:quotes', quotes);
     const fired = ledger.mark(prices());
+    autopilot?.onQuotes();
     for (const f of fired) {
       if (Notification.isSupported()) new Notification({ title: `Lodestar · ${f.reason.toUpperCase()} filled`, body: `${f.side.toUpperCase()} ${f.qty} ${f.symbol} @ ${f.price.toFixed(2)}` }).show();
     }
@@ -181,6 +202,29 @@ async function satellite() {
   }
   // data URL keeps the WebGL texture same-origin
   return { day, url: `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}` };
+}
+
+// ------------------------------------------------------------------ tray (keeps autopilot running)
+let trayHintShown = false;
+function ensureTray() {
+  if (tray) return refreshTray();
+  const img = nativeImage.createFromPath(path.join(__dirname, '../../build/icon.png')).resize({ width: 16, height: 16 });
+  tray = new Tray(img);
+  tray.setToolTip('Lodestar');
+  tray.on('click', () => { win.show(); win.focus(); });
+  refreshTray();
+}
+function refreshTray() {
+  if (!tray) return;
+  const on = autopilot.s.enabled;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open Lodestar', click: () => { win.show(); win.focus(); } },
+    { type: 'separator' },
+    { label: on ? 'Autopilot: on' : 'Autopilot: off', enabled: false },
+    { label: on ? 'Turn Autopilot off' : 'Turn Autopilot on', click: () => { on ? autopilot.stop() : autopilot.start(); refreshTray(); } },
+    { type: 'separator' },
+    { label: 'Quit Lodestar', click: () => { quitting = true; app.quit(); } },
+  ]));
 }
 
 // ------------------------------------------------------------------ IPC
@@ -220,6 +264,7 @@ function registerIpc() {
     const rec = ledger.order({ ...o, price: px }, prices());
     return { order: rec, state: ledger.snapshot(prices()) };
   });
+  handle('ledger:closeIn', (symbol, id) => { ledger.closePosition(symbol, prices(), 'manual close', id); return ledger.snapshot(prices()); });
   handle('ledger:close', (symbol) => { ledger.closePosition(symbol, prices()); return ledger.snapshot(prices()); });
   handle('ledger:bracket', (symbol, stop, target) => { ledger.setBracket(symbol, stop, target); return ledger.snapshot(prices()); });
   handle('ledger:createAccount', (name, cash) => { const id = ledger.createAccount(name, cash); ledger.switchAccount(id); return ledger.snapshot(prices()); });
@@ -235,6 +280,13 @@ function registerIpc() {
     shell.showItemInFolder(file);
     return file;
   });
+  handle('autopilot:state', () => autopilot.state());
+  handle('autopilot:start', () => { const st = autopilot.start(); refreshTray(); return st; });
+  handle('autopilot:stop', () => { const st = autopilot.stop(); refreshTray(); return st; });
+  handle('autopilot:flatten', () => autopilot.flatten());
+  handle('autopilot:reset', () => autopilot.reset());
+  handle('autopilot:configure', (p) => autopilot.configure(p));
+  handle('ledger:snapshotOf', (id) => ledger.snapshot(prices(), id));
   handle('updater:check', () => updater.check(true));
   handle('updater:install', () => updater.install());
 }
@@ -246,13 +298,30 @@ app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark';
   Menu.setApplicationMenu(null);
   ledger = new Ledger(DATA);
+  autopilot = new Autopilot({
+    dir: DATA, ledger, log,
+    prices,
+    events: () => [...events.values()],
+    daily: async (sym) => {
+      const hit = dailyCache.get(sym);
+      if (hit && Date.now() - hit.t < 30 * 60e3) return hit.c;
+      const c = await markets.chart(sym, '6M');
+      dailyCache.set(sym, { t: Date.now(), c });
+      return c;
+    },
+    notify: (title, body) => { if (settings.notifications && Notification.isSupported()) new Notification({ title, body }).show(); },
+    emit: (st) => { send('autopilot:state', st); send('ledger:state', ledger.snapshot(prices())); },
+  });
   registerIpc();
+  if (autopilot.s.enabled) ensureTray();
   createWindow();
   appReadyAt = Date.now();
   startFeeds();
   refreshQuotes();
   updater.init({ send, log });
 });
+
+app.on('before-quit', () => { quitting = true; });
 
 app.on('window-all-closed', () => {
   timers.forEach(clearInterval);

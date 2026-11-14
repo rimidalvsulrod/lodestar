@@ -1,5 +1,5 @@
 /* global d3, topojson, WORLD_110M */
-import { KINDS, hexA, truncate } from './util.js';
+import { KINDS, hexA, truncate, heat } from './util.js';
 
 // Flat world map on a canvas with pan/zoom, pulsing events and storm tracks.
 export class MapView {
@@ -43,6 +43,7 @@ export class MapView {
     this.base = { s: this.proj.scale(), t: this.proj.translate() };
   }
 
+  setThermal(on) { this.thermal = on; }
   setVisible(v) { this.visible = v; if (v) this.resize(); }
   setEvents(evs) { this.evs = evs; }
 
@@ -61,14 +62,33 @@ export class MapView {
     // ocean
     ctx.beginPath(); this.path({ type: 'Sphere' });
     const g = ctx.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h / 2, w * 0.7);
-    g.addColorStop(0, '#0c1a2c'); g.addColorStop(1, '#060b13');
+    const T = this.thermal;
+    g.addColorStop(0, T ? '#12040a' : '#0c1a2c'); g.addColorStop(1, T ? '#040106' : '#060b13');
     ctx.fillStyle = g; ctx.fill();
-    ctx.beginPath(); this.path(this.grat); ctx.strokeStyle = 'rgba(79,216,255,0.06)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); this.path(this.grat); ctx.strokeStyle = T ? 'rgba(255,120,40,0.06)' : 'rgba(79,216,255,0.06)'; ctx.lineWidth = 1; ctx.stroke();
 
     // land
-    ctx.beginPath(); this.path(this.land); ctx.fillStyle = '#15243a'; ctx.fill();
-    ctx.strokeStyle = 'rgba(110,200,255,0.35)'; ctx.lineWidth = 0.8; ctx.stroke();
-    ctx.beginPath(); this.path(this.borders); ctx.strokeStyle = 'rgba(110,200,255,0.26)'; ctx.lineWidth = 0.6; ctx.stroke();
+    ctx.beginPath(); this.path(this.land); ctx.fillStyle = T ? '#3a0d0a' : '#15243a'; ctx.fill();
+    ctx.strokeStyle = T ? 'rgba(255,150,70,0.4)' : 'rgba(110,200,255,0.35)'; ctx.lineWidth = 0.8; ctx.stroke();
+    ctx.beginPath(); this.path(this.borders); ctx.strokeStyle = T ? 'rgba(255,150,70,0.25)' : 'rgba(110,200,255,0.26)'; ctx.lineWidth = 0.6; ctx.stroke();
+
+    // thermal blooms: additive heat around every event
+    if (T) {
+      ctx.globalCompositeOperation = 'lighter';
+      const zz = Math.sqrt(this.t.k);
+      for (const e of this.evs) {
+        const p = this.proj([e.lon, e.lat]);
+        if (!p) continue;
+        const R = (16 + e.severity * 46) * zz;
+        const gr = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1], R);
+        gr.addColorStop(0, heat(0.85, 0.32 + e.severity * 0.3));
+        gr.addColorStop(0.45, heat(0.5, 0.16));
+        gr.addColorStop(1, heat(0.3, 0));
+        ctx.fillStyle = gr;
+        ctx.fillRect(p[0] - R, p[1] - R, R * 2, R * 2);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
     ctx.beginPath(); this.path({ type: 'Sphere' }); ctx.strokeStyle = 'rgba(79,216,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
 
     // storm tracks
@@ -85,7 +105,7 @@ export class MapView {
     for (const e of this.evs) {
       const p = this.proj([e.lon, e.lat]);
       if (!p || p[0] < -20 || p[1] < -20 || p[0] > w + 20 || p[1] > h + 20) continue;
-      const col = KINDS[e.kind].color;
+      const col = this.thermal ? '#ffe9a8' : KINDS[e.kind].color;
       const r = (2 + e.severity * 4.5) * z;
       this.screen.push([p[0], p[1], e, r]);
       if (e.severity >= 0.6) {

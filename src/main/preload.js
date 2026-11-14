@@ -24,12 +24,17 @@ contextBridge.exposeInMainWorld('lodestar', {
     onQuotes: on('markets:quotes'),
   },
   ledger: {
-    state: () => call('ledger:state'), order: (o) => call('ledger:order', o), close: (s) => call('ledger:close', s),
+    state: () => call('ledger:state'), order: (o) => call('ledger:order', o), close: (s) => call('ledger:close', s), closeIn: (s, id) => call('ledger:closeIn', s, id),
     bracket: (s, stop, target) => call('ledger:bracket', s, stop, target),
     createAccount: (n, c) => call('ledger:createAccount', n, c), switchAccount: (id) => call('ledger:switchAccount', id),
     resetAccount: () => call('ledger:resetAccount'), deleteAccount: (id) => call('ledger:deleteAccount', id),
     rules: (r) => call('ledger:rules', r), exportCsv: () => call('ledger:exportCsv'),
     onState: on('ledger:state'),
+  },
+  autopilot: {
+    state: () => call('autopilot:state'), start: () => call('autopilot:start'), stop: () => call('autopilot:stop'),
+    flatten: () => call('autopilot:flatten'), reset: () => call('autopilot:reset'), configure: (p) => call('autopilot:configure', p),
+    onState: on('autopilot:state'),
   },
   updater: { check: () => call('updater:check'), install: () => call('updater:install'), onStatus: on('updater:status') },
 });

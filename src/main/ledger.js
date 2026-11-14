@@ -75,8 +75,10 @@ class Ledger {
   }
 
   // side: 'buy' | 'sell'. Selling with no position opens a short.
-  order({ symbol, side, qty, price, stop, target, reason = 'manual' }, prices) {
-    const a = this.acct;
+  // side: 'buy' opens/adds a long or covers a short; 'sell' opens/adds a short or reduces a long.
+  order({ symbol, side, qty, price, stop, target, reason = 'manual', owner }, prices, accountId) {
+    const a = accountId ? this.state.accounts[accountId] : this.acct;
+    if (!a) throw new Error('No such account');
     qty = Number(qty);
     if (!symbol || !(qty > 0)) throw new Error('Enter a quantity above zero');
     if (!(price > 0)) throw new Error(`No live price for ${symbol}`);
@@ -86,7 +88,7 @@ class Ledger {
     const pos = a.positions[symbol] || { qty: 0, avg: 0, stop: null, target: null, opened: Date.now() };
     const closing = pos.qty !== 0 && Math.sign(pos.qty) !== Math.sign(signed);
 
-    if (reason === 'manual' && !closing) {
+    if (!closing) {
       const eq = this.equityOf(a, prices);
       const dayPnlPct = (eq / a.dayStart.equity - 1) * 100;
       if (a.rules.dailyLossPct > 0 && dayPnlPct <= -a.rules.dailyLossPct) {
@@ -114,22 +116,25 @@ class Ledger {
     a.fees += fee;
     if (stop !== undefined) pos.stop = stop > 0 ? Number(stop) : null;
     if (target !== undefined) pos.target = target > 0 ? Number(target) : null;
+    if (owner && !closing) pos.owner = owner;
+    if (!closing && pos.qty === signed) pos.opened = Date.now();
     pos.last = price;
 
     if (Math.abs(pos.qty) < 1e-9) delete a.positions[symbol];
     else a.positions[symbol] = pos;
 
-    const rec = { id: crypto.randomUUID().slice(0, 8), time: Date.now(), symbol, side, qty, price, fee, realized, reason };
+    const rec = { id: crypto.randomUUID().slice(0, 8), time: Date.now(), symbol, side, qty, price, fee, realized, reason, account: a.id };
     a.orders.unshift(rec);
     a.orders = a.orders.slice(0, 2000);
     this.save();
     return rec;
   }
 
-  closePosition(symbol, prices, reason = 'manual close') {
-    const p = this.acct.positions[symbol];
+  closePosition(symbol, prices, reason = 'manual close', accountId) {
+    const a = accountId ? this.state.accounts[accountId] : this.acct;
+    const p = a?.positions[symbol];
     if (!p) throw new Error('No position');
-    return this.order({ symbol, side: p.qty > 0 ? 'sell' : 'buy', qty: Math.abs(p.qty), price: prices[symbol] ?? p.last, reason }, prices);
+    return this.order({ symbol, side: p.qty > 0 ? 'sell' : 'buy', qty: Math.abs(p.qty), price: prices[symbol] ?? p.last, reason }, prices, a.id);
   }
 
   setBracket(symbol, stop, target) {
@@ -152,8 +157,8 @@ class Ledger {
         const long = p.qty > 0;
         const hitStop = p.stop && (long ? px <= p.stop : px >= p.stop);
         const hitTarget = p.target && (long ? px >= p.target : px <= p.target);
-        if ((hitStop || hitTarget) && a.id === this.state.active) {
-          try { fired.push(this.closePosition(s, prices, hitStop ? 'stop' : 'target')); } catch { /* ignore */ }
+        if (hitStop || hitTarget) {
+          try { fired.push(this.closePosition(s, prices, hitStop ? 'stop' : 'target', a.id)); } catch { /* ignore */ }
         }
       }
       const eq = this.equityOf(a, prices);
@@ -171,11 +176,11 @@ class Ledger {
     if (a.dayStart.date !== today()) a.dayStart = { date: today(), equity: this.equityOf(a, prices) };
   }
 
-  snapshot(prices) {
-    const a = this.acct;
+  snapshot(prices, accountId) {
+    const a = (accountId && this.state.accounts[accountId]) || this.acct;
     const eq = this.equityOf(a, prices);
     return {
-      active: a.id,
+      active: this.state.active,
       accounts: Object.values(this.state.accounts).map((x) => ({ id: x.id, name: x.name })),
       account: {
         ...a, equity: undefined, equityNow: eq, dayPnl: eq - a.dayStart.equity, totalPnl: eq - a.startCash,
