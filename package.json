@@ -1,0 +1,85 @@
+{
+  "name": "lodestar",
+  "version": "1.0.0",
+  "description": "Lodestar — global event terminal with live world events, markets and local paper trading",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "icons": "node build/make-icons.js",
+    "dist": "electron-builder --win nsis",
+    "release": "electron-builder --win nsis --publish always"
+  },
+  "keywords": [],
+  "author": "Lodestar",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "dependencies": {
+    "d3": "^7.9.2",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.11",
+    "fast-xml-parser": "^5.12.1",
+    "globe.gl": "^2.46.2",
+    "lightweight-charts": "^4.2.3",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "sharp": "^0.35.5"
+  },
+  "allowScripts": {
+    "electron@45.3.2": true,
+    "electron-winstaller@5.4.0": true
+  },
+  "productName": "Lodestar",
+  "build": {
+    "appId": "com.lodestar.terminal",
+    "productName": "Lodestar",
+    "copyright": "Lodestar",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Lodestar-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lodestar",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "rimidalvsulrod",
+        "repo": "lodestar",
+        "releaseType": "release"
+      }
+    ]
+  }
+}
