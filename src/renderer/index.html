@@ -4,122 +4,119 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' file: data: blob:; connect-src 'self' file: data: blob:; worker-src 'self' blob:">
   <title>Lodestar</title>
-  <link rel="stylesheet" href="../../node_modules/@fontsource/inter/400.css">
-  <link rel="stylesheet" href="../../node_modules/@fontsource/inter/500.css">
-  <link rel="stylesheet" href="../../node_modules/@fontsource/inter/600.css">
-  <link rel="stylesheet" href="../../node_modules/@fontsource/jetbrains-mono/400.css">
-  <link rel="stylesheet" href="../../node_modules/@fontsource/jetbrains-mono/500.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/ibm-plex-mono/300.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/ibm-plex-mono/400.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/ibm-plex-mono/500.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/ibm-plex-mono/600.css">
+  <link rel="stylesheet" href="../../node_modules/@fontsource/ibm-plex-mono/700.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- the world -->
-  <div id="stage">
-    <div id="globe" aria-label="Globe of live events"></div>
-    <canvas id="map2d" class="hidden" aria-label="Map of live events"></canvas>
-    <div class="fx" id="fx"></div>
-  </div>
-  <div class="frame" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
-  <div class="dragbar"></div>
+<div class="app">
+  <div class="micro"><span>LIVE SOURCES · USGS · NOAA NHC · NASA EONET · GDACS · WORLD NEWS RSS · YAHOO PRICE STREAM</span><span id="microRight"></span></div>
 
-  <!-- top left: identity + view readout -->
-  <header class="hud hud-tl">
-    <div class="brand"><img src="logo.svg" alt=""><span class="word">LODE<b>STAR</b></span></div>
-    <div class="hud-line">Global event terminal · paper trading</div>
+  <header class="title">
+    <h1><span class="yr" id="yr">2026</span> <span class="c">GLOBΛL</span><b>EVENT</b><span class="c">MΛP</span></h1>
+    <div class="t-right">
+      <span class="rec" title="Live price stream"><i id="streamDot"></i><span id="clock">--:--:-- UTC</span></span>
+      <button class="eq" id="equityBtn" title="Open portfolio (P)"></button>
+      <button class="tbtn hidden" id="updatePill"></button>
+      <button class="ic" id="btnSettings" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+      </button>
+      <div class="brand"><img src="logo.svg" alt=""><span>LODESTAR</span></div>
+    </div>
   </header>
 
-  <!-- top right: clock, money, settings -->
-  <div class="hud hud-tr">
-    <span class="rec"><i></i><span id="clock">--:--:-- UTC</span></span>
-    <button class="pill-btn" id="equityBtn" title="Open portfolio (P)"></button>
-    <button class="pill-btn accent hidden" id="updatePill"></button>
-    <button class="icon-btn" id="btnSettings" aria-label="Settings" title="Settings">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
-    </button>
-  </div>
+  <!-- the map -->
+  <main class="stage" id="stage">
+    <canvas id="map2d" aria-label="World map of live events"></canvas>
+    <div id="globe" class="hidden" aria-label="Globe of live events"></div>
 
-  <!-- left: events -->
-  <aside class="panel p-left" aria-label="Events">
-    <div class="p-head"><h2>Events</h2><span class="mono dim" id="eventCount"></span></div>
-    <div class="layers" id="layers"></div>
-    <div class="p-tools">
-      <input id="eventSearch" type="search" placeholder="Search places, sources" spellcheck="false" aria-label="Search events">
-      <div class="seg sm" id="sortSeg" role="tablist" aria-label="Sort events"><button data-v="time" class="on">Latest</button><button data-v="severity">Severity</button></div>
+    <div class="m-tools">
+      <div class="tg" id="viewSeg"><button data-v="map">MAP</button><button data-v="globe">GLOBE</button></div>
+      <div class="tg" id="fxSeg"><button data-fx="arcs">ARCS</button><button data-fx="hex">DENSITY</button><button data-fx="labels">LABELS</button></div>
+      <div class="tg globe-only" id="surfaceSeg"><button data-v="poster">INK</button><button data-v="night">NIGHT</button><button data-v="satellite">SATELLITE</button></div>
+      <div class="tg"><button id="btnHome">RESET VIEW</button><button id="btnChart">CHART</button><button id="btnPortfolio">PORTFOLIO</button></div>
     </div>
-    <div class="list" id="eventList"></div>
-  </aside>
 
-  <!-- right: markets + trade -->
-  <aside class="panel p-right" aria-label="Markets">
-    <div class="p-head"><h2>Markets</h2><span class="dim small">Delayed</span></div>
-    <div class="list" id="watchlist"></div>
-    <div class="trade" id="trade">
-      <div class="trade-top">
-        <div><div class="t-sym mono" id="tSym">CL=F</div><div class="t-name dim" id="tName"></div></div>
-        <div class="t-px"><div class="mono" id="tPx">—</div><div class="mono small" id="tCh"></div></div>
-      </div>
-      <div class="qty">
-        <button class="step" data-d="-1" aria-label="Less">−</button>
-        <input id="tQty" type="number" min="0" step="1" value="10" aria-label="Quantity">
-        <button class="step" data-d="1" aria-label="More">+</button>
-        <span class="dim small" id="tNotional"></span>
-      </div>
-      <div class="ls">
-        <button class="btn long" id="btnLong">Long</button>
-        <button class="btn short" id="btnShort">Short</button>
-      </div>
-      <div class="t-pos small" id="tPos"></div>
-      <details class="t-more"><summary>Stop and target</summary>
-        <div class="two"><label>Stop<input id="tStop" type="number" step="any" placeholder="None"></label><label>Target<input id="tTarget" type="number" step="any" placeholder="None"></label></div>
-      </details>
+    <section class="card hidden" id="detail" aria-live="polite"></section>
+
+    <div class="legend" id="legend">
+      <div class="lg-col"><div class="lg-h">SEVERITY → EXCHANGE</div><svg viewBox="0 0 150 28" id="lgArcs"></svg><div class="lg-s"><span>LOW</span><span>CRIT</span></div></div>
+      <div class="lg-col"><div class="lg-h">EVENT DENSITY</div><div class="lg-bar"></div><div class="lg-s"><span>SPARSE</span><span>DENSE</span></div></div>
+      <div class="lg-col"><div class="lg-h">EXCHANGE</div><div class="lg-x"><i></i>NYC · CHI · LON</div></div>
     </div>
-  </aside>
 
-  <!-- event detail -->
-  <section class="panel card hidden" id="detail" aria-live="polite"></section>
+    <section class="console" id="console" aria-label="Event feed">
+      <div class="con-head"><span>lodestar# tail -f /live/events</span><span class="dim" id="conCount"></span><span class="tg sm" id="sortSeg"><button data-v="time">LATEST</button><button data-v="severity">SEVERITY</button></span></div>
+      <div class="con-body" id="eventList"></div>
+      <label class="con-prompt"><span>lodestar# grep</span><input id="eventSearch" spellcheck="false" aria-label="Search events" placeholder="place, source or word"><i class="cursor"></i></label>
+    </section>
 
-  <!-- bottom left readout -->
-  <div class="hud hud-bl mono" id="readout"></div>
-  <div class="hud hud-br small" id="feedsLine"></div>
+    <section class="sheet hidden" id="chartSheet" aria-label="Chart">
+      <div class="sh-head">
+        <div class="sh-title" id="chartHead"></div>
+        <div class="tg" id="rangeSeg"><button data-v="1D">1D</button><button data-v="5D">5D</button><button data-v="1M">1M</button><button data-v="6M">6M</button><button data-v="1Y">1Y</button><button data-v="5Y">5Y</button></div>
+        <button class="x" data-close="chartSheet" aria-label="Close chart">CLOSE ✕</button>
+      </div>
+      <div class="chart-box" id="chart"></div>
+    </section>
 
-  <!-- chart sheet -->
-  <section class="panel sheet hidden" id="chartSheet" aria-label="Chart">
-    <div class="p-head">
-      <div class="chart-title" id="chartHead"></div>
-      <div class="seg sm" id="rangeSeg"><button data-v="1D" class="on">1D</button><button data-v="5D">5D</button><button data-v="1M">1M</button><button data-v="6M">6M</button><button data-v="1Y">1Y</button><button data-v="5Y">5Y</button></div>
-      <button class="icon-btn" data-close="chartSheet" aria-label="Close chart">✕</button>
-    </div>
-    <div class="chart-box"><div id="chart"></div></div>
+    <section class="sheet big hidden" id="portfolio" aria-label="Portfolio"></section>
+  </main>
+
+  <!-- timeline strip -->
+  <section class="strip">
+    <div class="sec-head"><h2>EVENT TIMELINE</h2><span class="q">SEVERITY(*) FROM LIVE_EVENTS WHERE AGE &lt; 72H</span><span class="fill"></span><span class="q">RING = HIGH SEVERITY · DOT = OTHER</span></div>
+    <div class="strip-box"><canvas id="timeline"></canvas></div>
   </section>
 
-  <!-- portfolio -->
-  <section class="panel sheet big hidden" id="portfolio" aria-label="Portfolio"></section>
+  <!-- dashboard -->
+  <section class="dash">
+    <div class="pnl">
+      <div class="ph"><h3>EVENTS</h3><span class="q">COUNT(*) FROM<br>LIVE_EVENTS</span><span class="big" id="bigEvents"></span></div>
+      <div class="pb"><div class="layers" id="layers"></div><div class="sub">TOP_REGIONS BY SEVERITY</div><div class="regions" id="regions"></div></div>
+    </div>
+    <div class="pnl">
+      <div class="ph"><h3>MARKETS</h3><span class="q">MEDIAN(CHG) FROM<br>WATCHLIST_1D</span><span class="big" id="bigMarkets"></span></div>
+      <div class="pb"><div class="wl" id="watchlist"></div></div>
+    </div>
+    <div class="pnl">
+      <div class="ph"><h3>PAPER TRADE</h3><span class="q">SUM(*) FROM<br>PAPER_ACCOUNT</span><span class="big" id="bigEquity"></span></div>
+      <div class="pb trade">
+        <div class="tr-sym"><b id="tSym">CL=F</b><span class="dim" id="tName"></span><span class="fill"></span><span id="tPx"></span><span id="tCh"></span></div>
+        <div class="tr-row"><span class="lbl">QTY</span><button class="step" data-d="-1" aria-label="Less">−</button><input id="tQty" type="number" min="0" step="any" value="10" aria-label="Quantity"><button class="step" data-d="1" aria-label="More">+</button><span class="fill"></span><span class="dim" id="tNotional"></span></div>
+        <div class="tr-row"><span class="lbl">STOP</span><input id="tStop" type="number" step="any" placeholder="none" aria-label="Stop price"><span class="lbl">TARGET</span><input id="tTarget" type="number" step="any" placeholder="none" aria-label="Target price"></div>
+        <div class="ls"><button class="btn long" id="btnLong">LONG</button><button class="btn short" id="btnShort">SHORT</button></div>
+        <div class="t-pos" id="tPos"></div>
+      </div>
+    </div>
+    <div class="pnl">
+      <div class="ph"><h3>AUTOPILOT</h3><span class="q">PNL(*) FROM<br>AUTOPILOT_ACCOUNT</span><span class="big" id="bigAuto"></span></div>
+      <div class="pb auto">
+        <div class="ap-row"><span class="lbl">STATUS</span><b id="apStatus">OFF</b><span class="fill"></span><button class="tbtn" id="btnAuto" role="switch" aria-checked="false">START</button></div>
+        <div class="ap-row"><label class="chk"><input type="checkbox" id="apEvents"> EVENT REACTION</label><label class="chk"><input type="checkbox" id="apTrend"> TREND</label></div>
+        <div class="ap-stats" id="apStats"></div>
+        <div class="ap-spark"><canvas id="apSpark"></canvas></div>
+        <div class="ap-log" id="apLog"></div>
+      </div>
+    </div>
+    <div class="pnl">
+      <div class="ph"><h3>POSITIONS</h3><span class="q">SHARE(*) FROM<br>OPEN_POSITIONS</span><span class="big" id="bigPos"></span></div>
+      <div class="pb"><div class="expo" id="posExpo"></div><div class="pos-list" id="posList"></div></div>
+    </div>
+  </section>
+</div>
 
-  <!-- dock -->
-  <nav class="dock" aria-label="Controls">
-    <div class="seg" id="viewSeg"><button data-v="globe" class="on">Globe</button><button data-v="map">Map</button></div>
-    <button class="dock-btn" id="btnLook" aria-haspopup="true">Look</button>
-    <button class="dock-btn" id="btnHome">Reset view</button>
-    <span class="sep"></span>
-    <button class="dock-btn" id="btnChart">Chart</button>
-    <button class="dock-btn" id="btnPortfolio">Portfolio</button>
-    <span class="sep"></span>
-    <button class="auto" id="btnAuto" role="switch" aria-checked="false"><i></i><span>Autopilot</span><b>Off</b></button>
-  </nav>
-  <div class="panel tray hidden" id="lookTray">
-    <div class="tray-row"><span class="dim small">Surface</span><div class="seg sm" id="surfaceSeg"><button data-v="night">Night</button><button data-v="satellite">Satellite</button><button data-v="dark">Dark</button></div></div>
-    <div class="tray-row"><span class="dim small">Filter</span><div class="seg sm" id="filterSeg"><button data-v="normal">Normal</button><button data-v="thermal">Thermal</button><button data-v="nvg">NVG</button><button data-v="crt">CRT</button><button data-v="noir">Noir</button></div></div>
-    <div class="tray-row"><span class="dim small">Spin</span><button class="switch" id="spinSwitch" role="switch" aria-label="Auto-rotate"></button></div>
-  </div>
+<div class="modal-back hidden" id="modalBack"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <div class="modal-back hidden" id="modalBack"><div class="panel modal" id="modal" role="dialog" aria-modal="true"></div></div>
-  <div class="toasts" id="toasts" aria-live="polite"></div>
-
-  <script src="../../node_modules/d3/dist/d3.min.js"></script>
-  <script src="../../node_modules/topojson-client/dist/topojson-client.min.js"></script>
-  <script src="../../node_modules/globe.gl/dist/globe.gl.min.js"></script>
-  <script src="../../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="../../assets/world-110m.js"></script>
-  <script src="../shared/exposures.js"></script>
-  <script type="module" src="app.js"></script>
+<script src="../../node_modules/d3/dist/d3.min.js"></script>
+<script src="../../node_modules/topojson-client/dist/topojson-client.min.js"></script>
+<script src="../../node_modules/globe.gl/dist/globe.gl.min.js"></script>
+<script src="../../assets/world-110m.js"></script>
+<script src="../shared/exposures.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

@@ -7,6 +7,7 @@ const markets = require('./markets');
 const { Ledger } = require('./ledger');
 const updater = require('./updater');
 const { Autopilot } = require('./autopilot');
+const { QuoteStream } = require('./stream');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -23,12 +24,12 @@ const SETTINGS_FILE = path.join(DATA, 'settings.json');
 const DEFAULT_SETTINGS = {
   globeStyle: 'night', autoRotate: true, notifications: true, notifyMinSeverity: 0.8,
   layers: { conflict: true, news: true, quake: true, storm: true, fire: true, volcano: true, flood: true, weather: true },
-  watchlist: markets.DEFAULT_WATCHLIST, quoteEverySec: 30, minQuakeMag: 3.5,
+  watchlist: markets.DEFAULT_WATCHLIST, quoteEverySec: 60, minQuakeMag: 3.5, view: 'map', fx: { arcs: true, hex: false, labels: true },
 };
 
 let win;
 let settings = readJson(SETTINGS_FILE, DEFAULT_SETTINGS);
-settings = { ...DEFAULT_SETTINGS, ...settings, layers: { ...DEFAULT_SETTINGS.layers, ...(settings.layers || {}) } };
+settings = { ...DEFAULT_SETTINGS, ...settings, layers: { ...DEFAULT_SETTINGS.layers, ...(settings.layers || {}) }, fx: { ...DEFAULT_SETTINGS.fx, ...(settings.fx || {}) } };
 let ledger;
 let autopilot;
 let tray;
@@ -53,11 +54,11 @@ function createWindow() {
   const ws = readJson(stateFile, { width: 1600, height: 960, maximized: true });
   win = new BrowserWindow({
     width: ws.width, height: ws.height, x: ws.x, y: ws.y, minWidth: 1180, minHeight: 720,
-    backgroundColor: '#05070b', show: false, title: 'Lodestar',
+    backgroundColor: '#000000', show: false, title: 'Lodestar',
     icon: path.join(__dirname, '../../build/icon.png'),
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#070a10', symbolColor: '#8b9bb0', height: 38 },
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    titleBarOverlay: { color: '#000000', symbolColor: '#57c7d4', height: 34 },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: !process.env.LODESTAR_SHOT },
   });
   if (ws.maximized) win.maximize();
   win.once('ready-to-show', () => win.show());
@@ -173,20 +174,60 @@ function watchSymbols() {
 let quoteTimer;
 async function refreshQuotes() {
   try {
-    const q = await markets.quotes(watchSymbols());
-    for (const [s, v] of Object.entries(q)) if (v.ok || !quotes[s]) quotes[s] = v;
-    send('markets:quotes', quotes);
-    const fired = ledger.mark(prices());
-    autopilot?.onQuotes();
-    for (const f of fired) {
-      if (Notification.isSupported()) new Notification({ title: `Lodestar · ${f.reason.toUpperCase()} filled`, body: `${f.side.toUpperCase()} ${f.qty} ${f.symbol} @ ${f.price.toFixed(2)}` }).show();
+    const syms = watchSymbols();
+    stream?.subscribe(syms);
+    const q = await markets.quotes(syms);
+    for (const [s, v] of Object.entries(q)) {
+      if (!v.ok && quotes[s]) continue;
+      // keep a fresher streamed price if one arrived after this poll started
+      if (quotes[s]?.streamAt && quotes[s].streamAt > Date.now() - 15e3) v.price = quotes[s].price;
+      quotes[s] = { ...v, streamAt: quotes[s]?.streamAt };
     }
-    send('ledger:state', ledger.snapshot(prices()));
+    send('markets:quotes', quotes);
+    markBook();
   } catch (e) {
     log.warn('quotes failed', e.message);
   }
   clearTimeout(quoteTimer);
-  quoteTimer = setTimeout(refreshQuotes, Math.max(10, settings.quoteEverySec) * 1000);
+  quoteTimer = setTimeout(refreshQuotes, Math.max(30, settings.quoteEverySec) * 1000);
+}
+
+// mark positions to market, fire stops/targets, let autopilot react (throttled for streamed ticks)
+let lastMark = 0;
+function markBook() {
+  lastMark = Date.now();
+  const fired = ledger.mark(prices());
+  autopilot?.onQuotes();
+  for (const f of fired) {
+    if (Notification.isSupported()) new Notification({ title: `Lodestar · ${f.reason.toUpperCase()} filled`, body: `${f.side.toUpperCase()} ${f.qty} ${f.symbol} @ ${f.price.toFixed(2)}` }).show();
+  }
+  send('ledger:state', ledger.snapshot(prices()));
+}
+
+// ------------------------------------------------------------------ live stream
+let stream;
+let pendingTicks = {};
+let tickTimer;
+function onTick(t) {
+  const q = quotes[t.id] || { symbol: t.id, ok: true, spark: [] };
+  q.ok = true;
+  q.price = t.price;
+  if (Number.isFinite(t.change)) q.prevClose = t.price - t.change;
+  if (q.prevClose) q.change = t.price / q.prevClose - 1;
+  if (Number.isFinite(t.dayHigh)) q.dayHigh = t.dayHigh;
+  if (Number.isFinite(t.dayLow)) q.dayLow = t.dayLow;
+  q.streamAt = Date.now();
+  if (q.spark?.length) q.spark[q.spark.length - 1] = t.price;
+  quotes[t.id] = q;
+  pendingTicks[t.id] = { symbol: t.id, price: q.price, change: q.change, prevClose: q.prevClose, dayHigh: q.dayHigh, dayLow: q.dayLow, t: Date.now() };
+  if (!tickTimer) {
+    tickTimer = setTimeout(() => {
+      send('markets:ticks', pendingTicks);
+      pendingTicks = {};
+      tickTimer = null;
+      if (Date.now() - lastMark > 3000) markBook();
+    }, 250);
+  }
 }
 
 // ------------------------------------------------------------------ satellite texture cache
@@ -248,6 +289,7 @@ function registerIpc() {
   handle('feeds:refresh', () => { for (const k of Object.keys(SOURCES)) runFeed(k); });
   handle('feeds:satellite', () => satellite());
   handle('markets:quotes', () => quotes);
+  handle('markets:streamStatus', () => stream?.status || 'off');
   handle('markets:chart', (symbol, range) => markets.chart(symbol, range));
   handle('markets:lookup', async (symbol) => {
     const c = await markets.chart(symbol.toUpperCase().trim(), '1D');
@@ -312,6 +354,7 @@ app.whenReady().then(() => {
     notify: (title, body) => { if (settings.notifications && Notification.isSupported()) new Notification({ title, body }).show(); },
     emit: (st) => { send('autopilot:state', st); send('ledger:state', ledger.snapshot(prices())); },
   });
+  stream = new QuoteStream({ onTick, log });
   registerIpc();
   if (autopilot.s.enabled) ensureTray();
   createWindow();

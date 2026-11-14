@@ -1,7 +1,7 @@
 {
   "name": "lodestar",
-  "version": "1.1.0",
-  "description": "Lodestar \u2014 global event terminal with live world events, markets and local paper trading",
+  "version": "1.2.0",
+  "description": "Lodestar — global event terminal with live world events, markets and local paper trading",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
@@ -14,14 +14,12 @@
   "license": "UNLICENSED",
   "type": "commonjs",
   "dependencies": {
-    "@fontsource/inter": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "d3": "^7.9.2",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.11",
     "fast-xml-parser": "^5.12.1",
     "globe.gl": "^2.46.2",
-    "lightweight-charts": "^4.2.3",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2"
   },

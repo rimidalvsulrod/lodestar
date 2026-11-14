@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('lodestar', {
   },
   markets: {
     quotes: () => call('markets:quotes'), chart: (s, r) => call('markets:chart', s, r), lookup: (s) => call('markets:lookup', s),
-    onQuotes: on('markets:quotes'),
+    onQuotes: on('markets:quotes'), onTicks: on('markets:ticks'), streamStatus: () => call('markets:streamStatus'),
   },
   ledger: {
     state: () => call('ledger:state'), order: (o) => call('ledger:order', o), close: (s) => call('ledger:close', s), closeIn: (s, id) => call('ledger:closeIn', s, id),
